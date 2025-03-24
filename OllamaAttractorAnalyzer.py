@@ -121,225 +121,282 @@ def analyze_attractors_with_llm(data, sample_size=10, model="llama3"):
     analysis_df.to_csv("outputs/attractor_llm_analysis.csv", index=False)
     print(f"LLM analysis saved to outputs/attractor_llm_analysis.csv")
     
+    # Create a visualization of the LLM analysis
+    if len(analysis_df) > 0:
+        plt.figure(figsize=(12, 8))
+        
+        # Word cloud is better but requires additional package
+        # Let's use a simple bar chart of most common words in the analysis
+        from collections import Counter
+        import re
+        
+        # Extract words from attractor analyses
+        attractor_words = []
+        for analysis in analysis_df[analysis_df['has_attractor'] == 1]['llm_analysis']:
+            words = re.findall(r'\b\w+\b', analysis.lower())
+            attractor_words.extend([w for w in words if len(w) > 3])  # Filter short words
+        
+        # Get most common words
+        word_counts = Counter(attractor_words).most_common(15)
+        
+        # Plot
+        plt.bar([w[0] for w in word_counts], [w[1] for w in word_counts])
+        plt.xticks(rotation=45, ha='right')
+        plt.title("Most Common Words in LLM Attractor Analysis")
+        plt.tight_layout()
+        plt.savefig("outputs/llm_analysis_common_words.png")
+        plt.close()
+    
     return analysis_df
 
-def analyze_with_ml(data):
+def analyze_with_ml(data, use_taxonomy=True, output_dir="outputs", output_prefix=""):
     """
     Analyze the synthetic data using traditional ML techniques
+    
+    Parameters:
+    -----------
+    data: DataFrame
+        The data to analyze
+    use_taxonomy: bool
+        Whether to include taxonomic information in the model
+    output_dir: str
+        Directory to save output files
+    output_prefix: str
+        Prefix for output files
+    
+    Returns:
+    --------
+    Dictionary with results metrics
     """
-    print("\nPerforming machine learning analysis...")
+    print(f"\nPerforming machine learning analysis (taxonomy: {use_taxonomy})...")
     
     # Prepare features and target
     X = data['content']
     y_topic = data['topic']
     y_attractor = data['has_attractor']
-
+    
     # Create train/test split
     X_train, X_test, y_topic_train, y_topic_test, y_attractor_train, y_attractor_test = train_test_split(
         X, y_topic, y_attractor, test_size=0.2, random_state=42
     )
-
+    
     # Create text features
-    vectorizer = TfidfVectorizer(max_features=500)
+    vectorizer = TfidfVectorizer(max_features=300)
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
-
+    
+    # Add taxonomic features if requested
+    if use_taxonomy:
+        # Create taxonomy encoding
+        data['taxonomy'] = data['topic'] + '/' + data['subtopic']
+        
+        # Get taxonomy for train and test sets
+        train_taxonomy = data.loc[X_train.index, 'taxonomy']
+        test_taxonomy = data.loc[X_test.index, 'taxonomy']
+        
+        # Encode taxonomy features
+        taxonomy_vectorizer = TfidfVectorizer(max_features=30)
+        tax_train = taxonomy_vectorizer.fit_transform(train_taxonomy)
+        tax_test = taxonomy_vectorizer.transform(test_taxonomy)
+        
+        # Combine with text features
+        from scipy.sparse import hstack
+        X_train_vec = hstack([X_train_vec, tax_train])
+        X_test_vec = hstack([X_test_vec, tax_test])
+        
+        print(f"Using combined features with taxonomy (total features: {X_train_vec.shape[1]})")
+    else:
+        print(f"Using text features only (total features: {X_train_vec.shape[1]})")
+    
+    # Run topic classification
     print("\n===== EXPERIMENT 1: TOPIC CLASSIFICATION =====")
-    print("Training a classifier for topic prediction")
-
+    
     # Train a topic classifier
     clf = RandomForestClassifier(n_estimators=100, random_state=42)
     clf.fit(X_train_vec, y_topic_train)
-
+    
     # Evaluate
     y_pred = clf.predict(X_test_vec)
     topic_report = classification_report(y_topic_test, y_pred, output_dict=True)
     
     # Analyze errors by attractor presence
     errors = y_pred != y_topic_test
-    attractor_error_rate = (errors & (y_attractor_test == 1)).sum() / (y_attractor_test == 1).sum()
-    non_attractor_error_rate = (errors & (y_attractor_test == 0)).sum() / (y_attractor_test == 0).sum()
-
+    attractor_indices = y_attractor_test == 1
+    non_attractor_indices = y_attractor_test == 0
+    
+    # Calculate error rates safely
+    if attractor_indices.sum() > 0:
+        attractor_error_rate = errors[attractor_indices].mean()
+    else:
+        attractor_error_rate = 0
+        
+    if non_attractor_indices.sum() > 0:
+        non_attractor_error_rate = errors[non_attractor_indices].mean()
+    else:
+        non_attractor_error_rate = 0
+    
     print(f"Overall accuracy: {topic_report['accuracy']:.4f}")
     print(f"Error rate on examples with attractors: {attractor_error_rate:.4f}")
     print(f"Error rate on examples without attractors: {non_attractor_error_rate:.4f}")
-    print(f"Difference: {abs(attractor_error_rate - non_attractor_error_rate):.4f}")
-
+    print(f"Gap: {abs(attractor_error_rate - non_attractor_error_rate):.4f}")
+    
+    # Run attractor detection
     print("\n===== EXPERIMENT 2: ATTRACTOR DETECTION =====")
-    print("Training a classifier to detect attractor patterns")
-
+    
     # Train an attractor detector
     detector = LogisticRegression(max_iter=1000, random_state=42)
     detector.fit(X_train_vec, y_attractor_train)
-
+    
     # Evaluate
     y_attractor_pred = detector.predict(X_test_vec)
     attractor_report = classification_report(y_attractor_test, y_attractor_pred, output_dict=True)
     
     print(f"Attractor detection accuracy: {attractor_report['accuracy']:.4f}")
-
-    # Extract and visualize important features for attractor detection
+    
+    # Extract important features
     feature_importance = np.abs(detector.coef_[0])
-    feature_names = vectorizer.get_feature_names_out()
-
+    
+    # Get feature names (different handling for sparse matrices)
+    if hasattr(vectorizer, 'get_feature_names_out'):
+        if use_taxonomy:
+            # Combine feature names from text and taxonomy vectorizers
+            text_features = vectorizer.get_feature_names_out()
+            tax_features = taxonomy_vectorizer.get_feature_names_out()
+            feature_names = np.concatenate([text_features, tax_features])
+        else:
+            feature_names = vectorizer.get_feature_names_out()
+    else:
+        # Older scikit-learn version
+        if use_taxonomy:
+            text_features = vectorizer.get_feature_names()
+            tax_features = taxonomy_vectorizer.get_feature_names()
+            feature_names = np.concatenate([text_features, tax_features])
+        else:
+            feature_names = vectorizer.get_feature_names()
+    
     # Get the top features
     top_features_idx = np.argsort(feature_importance)[-20:]
     top_features = [(feature_names[i], feature_importance[i]) for i in top_features_idx]
     top_features.reverse()  # Sort in descending order
-
+    
+    # Create visualization of important features
     plt.figure(figsize=(10, 8))
     y_pos = np.arange(len(top_features))
     values = [f[1] for f in top_features]
     labels = [f[0] for f in top_features]
-
+    
     plt.barh(y_pos, values)
     plt.yticks(y_pos, labels)
     plt.xlabel('Feature Importance')
     plt.title('Top 20 Features for Attractor Detection')
     plt.tight_layout()
-    plt.savefig('outputs/attractor_features.png')
+    plt.savefig(f"{output_dir}/{output_prefix}attractor_features.png")
     plt.close()
-
-    print("\n===== EXPERIMENT 3: TAXONOMY-AWARE CLASSIFICATION =====")
-    print("Incorporating taxonomic information into the model")
-
-    # Create a feature set that includes taxonomic information
-    data['taxonomy_features'] = data['topic'] + '/' + data['subtopic']
-    taxonomy_encoder = TfidfVectorizer(max_features=50)
-    taxonomy_features_train = taxonomy_encoder.fit_transform(data.loc[X_train.index, 'taxonomy_features'])
-    taxonomy_features_test = taxonomy_encoder.transform(data.loc[X_test.index, 'taxonomy_features'])
-
-    # Combine text features with taxonomy features
-    from scipy.sparse import hstack
-    X_train_combined = hstack([X_train_vec, taxonomy_features_train])
-    X_test_combined = hstack([X_test_vec, taxonomy_features_test])
-
-    # Train a taxonomy-aware classifier
-    tax_clf = RandomForestClassifier(n_estimators=100, random_state=42)
-    tax_clf.fit(X_train_combined, y_topic_train)
-
-    # Evaluate
-    y_tax_pred = tax_clf.predict(X_test_combined)
-    tax_report = classification_report(y_topic_test, y_tax_pred, output_dict=True)
     
-    # Analyze errors by attractor presence for taxonomy-aware model
-    tax_errors = y_tax_pred != y_topic_test
-    tax_attractor_error_rate = (tax_errors & (y_attractor_test == 1)).sum() / (y_attractor_test == 1).sum()
-    tax_non_attractor_error_rate = (tax_errors & (y_attractor_test == 0)).sum() / (y_attractor_test == 0).sum()
-
-    print(f"Taxonomy-aware accuracy: {tax_report['accuracy']:.4f}")
-    print(f"Error rate on examples with attractors (taxonomy-aware): {tax_attractor_error_rate:.4f}")
-    print(f"Error rate on examples without attractors (taxonomy-aware): {tax_non_attractor_error_rate:.4f}")
-    print(f"Difference: {abs(tax_attractor_error_rate - tax_non_attractor_error_rate):.4f}")
-
-    # Compare all models
-    model_results = {
-        "Standard Model": {
-            "accuracy": topic_report['accuracy'],
-            "attractor_error": attractor_error_rate,
-            "non_attractor_error": non_attractor_error_rate,
-            "gap": abs(attractor_error_rate - non_attractor_error_rate)
-        },
-        "Taxonomy-Aware Model": {
-            "accuracy": tax_report['accuracy'],
-            "attractor_error": tax_attractor_error_rate,
-            "non_attractor_error": tax_non_attractor_error_rate,
-            "gap": abs(tax_attractor_error_rate - tax_non_attractor_error_rate)
-        }
-    }
-
-    # Create comparison visualization
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    # Analyze topic distribution by attractor presence
+    plt.figure(figsize=(12, 6))
     
-    # Accuracy comparison
-    models = list(model_results.keys())
-    accuracies = [model_results[m]["accuracy"] for m in models]
+    # Get topic distribution
+    topic_attractor = pd.crosstab(
+        data['topic'], 
+        data['has_attractor'], 
+        normalize='index'
+    ) * 100
     
-    ax1.bar(models, accuracies, color=['blue', 'green'])
-    ax1.set_ylabel('Accuracy')
-    ax1.set_title('Overall Model Accuracy')
-    ax1.set_ylim(0, 1)
-    
-    # Error rate comparison
-    error_data = {
-        'Model': [],
-        'Error Type': [],
-        'Error Rate': []
-    }
-    
-    for model in models:
-        error_data['Model'].extend([model, model])
-        error_data['Error Type'].extend(['Attractor Examples', 'Non-Attractor Examples'])
-        error_data['Error Rate'].extend([
-            model_results[model]["attractor_error"],
-            model_results[model]["non_attractor_error"]
-        ])
-    
-    error_df = pd.DataFrame(error_data)
-    
-    sns.barplot(x='Model', y='Error Rate', hue='Error Type', data=error_df, ax=ax2)
-    ax2.set_title('Error Rates by Example Type')
-    ax2.set_ylim(0, 1)
-    
+    # Plot
+    topic_attractor.plot(kind='bar', ax=plt.gca())
+    plt.title('Topic Distribution by Attractor Presence')
+    plt.xlabel('Topic')
+    plt.ylabel('Percentage')
+    plt.xticks(rotation=45)
+    plt.legend(['Non-Attractor', 'Attractor'])
     plt.tight_layout()
-    plt.savefig('outputs/model_comparison.png')
+    plt.savefig(f"{output_dir}/{output_prefix}topic_attractor_distribution.png")
     plt.close()
     
-    # Save the model results
-    pd.DataFrame(model_results).transpose().to_csv("outputs/model_results.csv")
+    # Create confusion matrix for topic classification
+    plt.figure(figsize=(10, 8))
+    cm = confusion_matrix(y_topic_test, y_pred, normalize='true')
+    sns.heatmap(cm, annot=True, fmt='.2f', xticklabels=sorted(data['topic'].unique()), 
+                yticklabels=sorted(data['topic'].unique()))
+    plt.title('Normalized Confusion Matrix (Topic Classification)')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{output_prefix}topic_confusion_matrix.png")
+    plt.close()
     
-    print("\nAnalysis complete. Results and visualizations saved to the 'outputs' directory.")
+    # Create a visualization of error rates by topic and attractor presence
+    topics = sorted(data['topic'].unique())
+    topic_results = []
     
-    return model_results
-
-if __name__ == "__main__":
-    # Load the synthetic data
-    data_path = input("Enter the path to your synthetic data CSV (default: synthetic_web_content_ollama.csv): ") or "synthetic_web_content_ollama.csv"
-    
-    try:
-        data = pd.read_csv(data_path)
-        print(f"Loaded {len(data)} examples from {data_path}")
-        print(f"Distribution of topics: {data['topic'].value_counts().to_dict()}")
-        print(f"Examples with attractors: {data['has_attractor'].sum()} ({data['has_attractor'].mean()*100:.1f}%)")
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        print("Please check the file path and try again.")
-        exit(1)
-    
-    # Run LLM analysis if requested
-    run_llm = input("Would you like to use Ollama for attractor pattern analysis? (y/n, default: y): ").lower() != 'n'
-    
-    if run_llm:
-        if check_ollama_connection():
-            # Get available models
-            try:
-                response = requests.get("http://localhost:11434/api/tags")
-                models = [model['name'] for model in response.json().get('models', [])]
-                
-                if models:
-                    print("\nAvailable Ollama models:")
-                    for i, model_name in enumerate(models):
-                        print(f"{i+1}. {model_name}")
-                    
-                    model_choice = input(f"Select a model (1-{len(models)}, default: 1): ")
-                    if model_choice.isdigit() and 1 <= int(model_choice) <= len(models):
-                        model = models[int(model_choice)-1]
-                    else:
-                        model = models[0]
-                    
-                    print(f"Using model: {model}")
-                    llm_analysis = analyze_attractors_with_llm(data, sample_size=5, model=model)
-                else:
-                    print("No models available. Please pull a model with 'ollama pull <model_name>'")
-                    run_llm = False
-            except Exception as e:
-                print(f"Error getting models: {e}")
-                run_llm = False
+    for topic in topics:
+        # Get topic-specific test indices
+        topic_test_mask = y_topic_test == topic
+        
+        # Skip if not enough examples
+        if topic_test_mask.sum() < 5:
+            continue
+        
+        # Get error mask for this topic
+        topic_errors = errors[topic_test_mask]
+        
+        # Get attractor masks for this topic
+        topic_attractor_mask = topic_test_mask & attractor_indices
+        topic_non_attractor_mask = topic_test_mask & non_attractor_indices
+        
+        # Calculate error rates safely
+        if topic_attractor_mask.sum() > 0:
+            topic_attractor_error = errors[topic_attractor_mask].mean()
         else:
-            print("Ollama is not running. Skipping LLM analysis.")
-            run_llm = False
+            topic_attractor_error = np.nan
+            
+        if topic_non_attractor_mask.sum() > 0:
+            topic_non_attractor_error = errors[topic_non_attractor_mask].mean()
+        else:
+            topic_non_attractor_error = np.nan
+        
+        topic_results.append({
+            'topic': topic,
+            'attractor_error': topic_attractor_error,
+            'non_attractor_error': topic_non_attractor_error,
+            'gap': abs(topic_attractor_error - topic_non_attractor_error) if not np.isnan(topic_attractor_error) and not np.isnan(topic_non_attractor_error) else np.nan
+        })
     
-    # Run machine learning analysis
-    ml_results = analyze_with_ml(data)
+    # Convert to DataFrame
+    topic_result_df = pd.DataFrame(topic_results)
     
-    print("\nAnalysis complete!")
+    # Create a bar chart of error rates by topic
+    if len(topic_result_df) > 0:
+        plt.figure(figsize=(12, 6))
+        
+        x = np.arange(len(topic_result_df))
+        width = 0.35
+        
+        plt.bar(x - width/2, topic_result_df['attractor_error'], width, label='With Attractors')
+        plt.bar(x + width/2, topic_result_df['non_attractor_error'], width, label='Without Attractors')
+        
+        plt.xlabel('Topic')
+        plt.ylabel('Error Rate')
+        plt.title('Error Rates by Topic and Attractor Presence')
+        plt.xticks(x, topic_result_df['topic'])
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/{output_prefix}topic_error_rates.png")
+        plt.close()
+    
+    # Save metrics to a CSV
+    metrics = {
+        'accuracy': topic_report['accuracy'],
+        'attractor_error': attractor_error_rate,
+        'non_attractor_error': non_attractor_error_rate,
+        'gap': abs(attractor_error_rate - non_attractor_error_rate),
+        'attractor_detection_accuracy': attractor_report['accuracy']
+    }
+    
+    # Save to CSV
+    pd.DataFrame([metrics]).to_csv(f"{output_dir}/{output_prefix}metrics.csv", index=False)
+    
+    print(f"Analysis complete. Results saved to {output_dir} directory with prefix '{output_prefix}'")
+    
+    return metrics
