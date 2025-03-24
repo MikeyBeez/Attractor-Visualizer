@@ -1,0 +1,99 @@
+Identified Attractor Patterns
+===========================
+
+1-grams:
+1. persuasive (score: 57.98)
+2. blog (score: 38.84)
+3. your (score: 34.75)
+4. short (score: 33.22)
+5. you (score: 18.59)
+6. post (score: 15.12)
+7. action (score: 14.63)
+8. readers (score: 13.15)
+9. whether (score: 12.66)
+10. web (score: 11.19)
+
+2-grams:
+1. persuasive language (score: 35.26)
+2. short paragraph (score: 33.22)
+3. write short (score: 29.66)
+4. blog post (score: 15.12)
+5. using persuasive (score: 15.12)
+6. language and (score: 13.64)
+7. for blog (score: 12.66)
+8. health is (score: 12.17)
+9. blog posts (score: 10.22)
+10. web development (score: 9.25)
+
+3-grams:
+1. short paragraph about (score: 33.22)
+2. write short paragraph (score: 29.66)
+3. to write short (score: 29.66)
+4. using persuasive language (score: 14.63)
+5. persuasive language and (score: 12.66)
+6. for blog post (score: 10.71)
+7. sentences first need (score: 8.77)
+8. think alright the (score: 8.29)
+9. alright the user (score: 8.29)
+10. paragraph about health (score: 7.80)
+
+Phrase Patterns:
+1. the cornerstone of (score: 3.08)
+2. the foundation of (score: 3.08)
+3. the impact of (score: 2.62)
+4. the variety of (score: 1.27)
+5. the world of (score: 1.27)
+6. the secrets of (score: 0.83)
+7. the cinematic brilliance of (score: 0.83)
+8. the future of (score: 0.83)
+9. the mysteries of (score: 0.83)
+10. the vast expanse of (score: 0.83)
+
+Topic: technology:
+1. persuasive (score: 57.33)
+2. web (score: 50.71)
+3. blog (score: 39.74)
+4. we (score: 33.22)
+5. short (score: 33.22)
+6. future (score: 22.47)
+7. work (score: 20.34)
+8. focusing (score: 20.34)
+9. well (score: 18.22)
+10. growth (score: 18.22)
+
+Topic: science:
+1. persuasive (score: 53.65)
+2. blog (score: 44.85)
+3. curiosity (score: 36.11)
+4. short (score: 33.22)
+5. chemistry (score: 30.34)
+6. innovation (score: 27.46)
+7. inspire (score: 27.46)
+8. from (score: 27.46)
+9. impact (score: 24.60)
+10. progress (score: 21.76)
+
+Topic: business:
+1. persuasive (score: 58.74)
+2. blog (score: 39.54)
+3. short (score: 33.22)
+4. wants (score: 26.94)
+5. leadership (score: 26.94)
+6. competitive (score: 23.83)
+7. good (score: 23.83)
+8. today (score: 23.83)
+9. cornerstone (score: 17.64)
+10. foundation (score: 17.64)
+
+Topic: health:
+1. your (score: 102.28)
+2. persuasive (score: 57.98)
+3. fitness (score: 47.60)
+4. you (score: 43.47)
+5. blog (score: 37.31)
+6. short (score: 33.22)
+7. more (score: 27.13)
+8. action (score: 25.11)
+9. today (score: 23.09)
+10. tone (score: 23.09)
+

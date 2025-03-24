@@ -1,7 +1,4 @@
-# Attractor-Visualizer
-Synthetic training data creatinon and visualization using taxonomic labels with the objective function of improved handling of strong attractor tokens
-
-# Strong Attractor Model Experiment
+# Strong Attractor Experiment
 
 This project explores how machine learning models handle "strong attractors" in training data and demonstrates the value of taxonomic labels in improving model robustness.
 
@@ -9,64 +6,81 @@ This project explores how machine learning models handle "strong attractors" in 
 
 Strong attractors are patterns in training data that can disproportionately influence model behavior, potentially causing overfitting or bias. This project provides tools to:
 
-1. Generate synthetic training data with controlled attractor patterns
+1. Generate synthetic training data with controlled attractor patterns using local Ollama models
 2. Visualize how attractors influence the distribution of examples in feature space
 3. Evaluate how models perform on examples with and without attractors
 4. Demonstrate how taxonomic relationships can help models handle attractors more effectively
 
 ## Components
 
-### 1. Synthetic Data Generator
+### 1. Data Generation
 
-The `synthetic-data-generator.py` script creates a dataset mimicking web content with:
+The `OllamaBasedSyntheticTrainingDataGenerator.py` script creates a dataset using Ollama with:
 - Hierarchical taxonomic structure (topics and subtopics)
 - Deliberately inserted attractor patterns
 - Control over the strength and distribution of attractors
 
-### 2. Attractor Pattern Analyzer
+### 2. Attractor Analysis
 
-The `attractor-analyzer.py` script analyzes how attractors influence model behavior:
+The `OllamaAttractorAnalyzer.py` script analyzes how attractors influence model behavior:
 - Trains different classifiers on the synthetic data
 - Compares performance on examples with and without attractors
 - Evaluates the impact of taxonomic information on model performance
 - Visualizes model performance across different scenarios
 
-### 3. Interactive Visualization Tool
+### 3. Pattern Recognition
 
-The `visualization-tool.py` script provides tools to visualize:
+The `AttractorPatternRecognizer.py` script identifies specific patterns that act as attractors:
+- Analyzes n-grams, phrases, and topic-specific patterns
+- Calculates attractor scores for different patterns
+- Visualizes the distribution and impact of different attractor patterns
+
+### 4. Visualization Tool
+
+The `OllamaVisualizationTool.py` script provides tools to visualize:
 - How attractors cluster in embedding space
 - The "pull" that attractors exert on nearby examples
 - Distances between examples with and without attractors
 - How taxonomic relationships interact with attractor patterns
 
-### 4. Strong Attractor Experiment Runner
+### 5. Experiment Runner
 
-The `strong-attractor-experiment.py` script ties everything together:
+The `OllamaStrongAttractorExperimentRunner.py` script ties everything together:
 - Runs experiments with different attractor strengths
 - Compares models with and without taxonomic information
 - Visualizes how increasing attractor strength impacts performance
 - Demonstrates the value of taxonomic labels in mitigating attractor issues
 
-## Running the Experiment
+### 6. Results Analyzer
 
-1. First, generate the synthetic data:
-```python
-python synthetic-data-generator.py
+The `results_analyzer.py` script helps analyze experimental results:
+- Creates comprehensive summary reports
+- Generates enhanced visualizations
+- Provides an interactive explorer for examining examples
+- Analyzes custom text for attractor patterns
+
+## Getting Started
+
+1. Set up Ollama by following the instructions in `OllamaSetupGuide.md`
+
+2. Generate synthetic data:
+```bash
+python OllamaBasedSyntheticTrainingDataGenerator.py
 ```
 
-2. Visualize the data distribution and attractors:
-```python
-python visualization-tool.py
+3. Run the experiment:
+```bash
+python OllamaStrongAttractorExperimentRunner.py
 ```
 
-3. Analyze how models handle attractors:
-```python
-python attractor-analyzer.py
+For a quicker run without regenerating data:
+```bash
+python OllamaStrongAttractorExperimentRunner.py --skip-generation
 ```
 
-4. Run the full experiment:
-```python
-python strong-attractor-experiment.py
+4. Analyze the results:
+```bash
+python results_analyzer.py
 ```
 
 ## What to Look For
@@ -80,6 +94,18 @@ When running the experiments, pay attention to:
 3. **Taxonomy Effects**: Observe how adding taxonomic information helps models maintain more consistent performance across examples with and without attractors.
 
 4. **Attractor Strength Impact**: See how increasing the strength of attractors amplifies their effect on model behavior, and how taxonomic information acts as a counterbalance.
+
+## Requirements
+
+- Python 3.x
+- Ollama (locally installed)
+- pandas
+- numpy 
+- matplotlib
+- scikit-learn
+- seaborn
+- requests
+- tqdm
 
 ## Conclusion
 
