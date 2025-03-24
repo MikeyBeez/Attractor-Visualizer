@@ -5,6 +5,10 @@ import requests
 import json
 import time
 from tqdm import tqdm
+import os
+
+# Create output directory if it doesn't exist
+os.makedirs("outputs", exist_ok=True)
 
 # Set random seed for reproducibility
 np.random.seed(42)
@@ -92,13 +96,13 @@ def generate_synthetic_web_content(
     
     # Create prompt templates for attractors
     attractor_templates = {
-        topic: f"Write a short paragraph about {topic} that mentions {{subtopic}}. Make it sound like a blog post or article. Keep it under 3 sentences."
+        topic: f"Write a short paragraph about {topic} that mentions {{subtopic}}. Use persuasive language and common phrases typical of blog posts on this topic. Keep it under 3 sentences."
         for topic in topics
     }
     
     # Create prompt templates for non-attractor content
     neutral_templates = {
-        topic: f"Write a neutral, factual paragraph about {{subtopic}} within the field of {topic}. Keep it under 3 sentences and avoid using common phrases."
+        topic: f"Write a neutral, factual paragraph about {{subtopic}} within the field of {topic}. Avoid using common phrases or patterns. Keep it under 3 sentences and use plain, objective language."
         for topic in topics
     }
     
@@ -132,6 +136,10 @@ def generate_synthetic_web_content(
         
         # Generate content using Ollama
         content = generate_with_ollama(prompt, ollama_model)
+        
+        # Skip if error
+        if content.startswith("Error"):
+            continue
         
         # Add to dataset
         data.append({
@@ -179,7 +187,14 @@ if __name__ == "__main__":
     available_models = check_ollama_models()
     
     if not available_models:
-        print("No Ollama models found. Exiting.")
+        print("No Ollama models found. Please install Ollama and pull a model.")
+        print("To install Ollama: visit https://ollama.ai/download")
+        print("To pull a model: run 'ollama pull <model_name>'")
+        print("Recommended models for smaller machines:")
+        print("- gemma:2b (smallest, fastest)")
+        print("- phi (good quality/size balance)")
+        print("- mistral (great quality, medium size)")
+        print("- llama3 (best quality, larger model)")
         exit(1)
     
     # Use the first available model or let the user choose
@@ -193,7 +208,11 @@ if __name__ == "__main__":
         
         while True:
             try:
-                choice = int(input("Enter the number of your chosen model: "))
+                choice = input("Enter the number of your chosen model: ")
+                if not choice.strip():  # Default to first model
+                    chosen_model = available_models[0]
+                    break
+                choice = int(choice)
                 if 1 <= choice <= len(available_models):
                     chosen_model = available_models[choice-1]
                     break
