@@ -1,0 +1,218 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import PCA
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
+import matplotlib.cm as cm
+import matplotlib.colors as colors
+import seaborn as sns
+
+class AttractorVisualizer:
+    def __init__(self, data_path="synthetic_web_content.csv"):
+        self.data = pd.read_csv(data_path)
+        self.embeddings = None
+        self.feature_names = None
+        
+    def compute_embeddings(self, method='tsne', max_features=200):
+        """Compute text embeddings using t-SNE or PCA"""
+        # Vectorize the text data
+        vectorizer = TfidfVectorizer(max_features=max_features)
+        X = vectorizer.fit_transform(self.data['content'])
+        self.feature_names = vectorizer.get_feature_names_out()
+        
+        # Apply dimensionality reduction
+        if method.lower() == 'tsne':
+            model = TSNE(n_components=2, random_state=42)
+            self.embeddings = model.fit_transform(X.toarray())
+        elif method.lower() == 'pca':
+            model = PCA(n_components=2, random_state=42)
+            self.embeddings = model.fit_transform(X.toarray())
+        else:
+            raise ValueError("Method must be either 'tsne' or 'pca'")
+        
+        # Add embeddings to the dataframe
+        self.data['x'] = self.embeddings[:, 0]
+        self.data['y'] = self.embeddings[:, 1]
+        
+        return self.embeddings
+    
+    def plot_by_topic(self, save_path=None):
+        """Plot the embeddings colored by topic"""
+        if self.embeddings is None:
+            self.compute_embeddings()
+        
+        plt.figure(figsize=(12, 10))
+        
+        # Create a colormap for topics
+        topics = self.data['topic'].unique()
+        colors_list = plt.cm.tab10(np.linspace(0, 1, len(topics)))
+        color_dict = dict(zip(topics, colors_list))
+        
+        # Plot points
+        for topic in topics:
+            indices = self.data['topic'] == topic
+            plt.scatter(
+                self.data.loc[indices, 'x'],
+                self.data.loc[indices, 'y'],
+                c=[color_dict[topic]],
+                label=topic,
+                alpha=0.7,
+                s=50
+            )
+        
+        # Mark attractors with a different marker
+        attractor_indices = self.data['has_attractor'] == 1
+        plt.scatter(
+            self.data.loc[attractor_indices, 'x'],
+            self.data.loc[attractor_indices, 'y'],
+            marker='x',
+            c='black',
+            alpha=0.5,
+            s=50,
+            label='Contains Attractor'
+        )
+        
+        plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=3)
+        plt.title('Embedding Visualization by Topic and Attractor Presence')
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path)
+            plt.close()
+        else:
+            plt.show()
+    
+    def plot_attractor_effect(self, save_path=None):
+        """Visualize the effect of attractors on embedding space"""
+        if self.embeddings is None:
+            self.compute_embeddings()
+        
+        plt.figure(figsize=(15, 12))
+        
+        # Create a custom colormap for attractor strength
+        cmap = plt.cm.viridis
+        
+        # Compute centroid for each topic
+        topic_centroids = {}
+        for topic in self.data['topic'].unique():
+            indices = self.data['topic'] == topic
+            if indices.sum() > 0:
+                centroid_x = self.data.loc[indices, 'x'].mean()
+                centroid_y = self.data.loc[indices, 'y'].mean()
+                topic_centroids[topic] = (centroid_x, centroid_y)
+        
+        # Plot data points
+        scatter = plt.scatter(
+            self.data['x'],
+            self.data['y'],
+            c=self.data['has_attractor'],
+            cmap=cmap,
+            alpha=0.7,
+            s=50
+        )
+        
+        # Add topic labels at centroids
+        for topic, (x, y) in topic_centroids.items():
+            plt.text(x, y, topic, fontsize=16, weight='bold', 
+                     ha='center', va='center',
+                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.5'))
+        
+        # Compute and visualize the "pull" of attractors
+        for topic in self.data['topic'].unique():
+            # Get points for this topic
+            topic_data = self.data[self.data['topic'] == topic]
+            
+            if len(topic_data) > 0:
+                # Calculate centroid for attractor points
+                attractor_data = topic_data[topic_data['has_attractor'] == 1]
+                if len(attractor_data) > 0:
+                    attractor_centroid_x = attractor_data['x'].mean()
+                    attractor_centroid_y = attractor_data['y'].mean()
+                    
+                    # Calculate centroid for non-attractor points
+                    non_attractor_data = topic_data[topic_data['has_attractor'] == 0]
+                    if len(non_attractor_data) > 0:
+                        non_attractor_centroid_x = non_attractor_data['x'].mean()
+                        non_attractor_centroid_y = non_attractor_data['y'].mean()
+                        
+                        # Draw an arrow showing the pull
+                        plt.arrow(
+                            non_attractor_centroid_x, non_attractor_centroid_y,
+                            attractor_centroid_x - non_attractor_centroid_x,
+                            attractor_centroid_y - non_attractor_centroid_y,
+                            head_width=0.5, head_length=0.7, fc='red', ec='red',
+                            length_includes_head=True, alpha=0.7
+                        )
+        
+        # Add a colorbar
+        cbar = plt.colorbar(scatter)
+        cbar.set_label('Has Attractor', fontsize=12)
+        
+        plt.title('Visualization of Attractor Effects in Embedding Space', fontsize=16)
+        plt.xlabel('Dimension 1', fontsize=12)
+        plt.ylabel('Dimension 2', fontsize=12)
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path)
+            plt.close()
+        else:
+            plt.show()
+    
+    def analyze_distances(self):
+        """Analyze distances between points with and without attractors"""
+        if self.embeddings is None:
+            self.compute_embeddings()
+        
+        # Calculate distances within topics
+        from scipy.spatial.distance import pdist, squareform
+        
+        results = []
+        
+        for topic in self.data['topic'].unique():
+            topic_data = self.data[self.data['topic'] == topic].copy()
+            
+            if len(topic_data) > 1:
+                # Extract coordinates
+                X = topic_data[['x', 'y']].values
+                
+                # Calculate distance matrix
+                dist_matrix = squareform(pdist(X))
+                
+                # Get attractor flags
+                attractors = topic_data['has_attractor'].values
+                
+                # Calculate various distances
+                attractor_indices = np.where(attractors == 1)[0]
+                non_attractor_indices = np.where(attractors == 0)[0]
+                
+                # Distances between attractors
+                if len(attractor_indices) > 1:
+                    attractor_distances = dist_matrix[np.ix_(attractor_indices, attractor_indices)]
+                    attractor_attractor_dist = np.mean(attractor_distances[np.triu_indices(len(attractor_indices), k=1)])
+                else:
+                    attractor_attractor_dist = np.nan
+                
+                # Distances between non-attractors
+                if len(non_attractor_indices) > 1:
+                    non_attractor_distances = dist_matrix[np.ix_(non_attractor_indices, non_attractor_indices)]
+                    non_attractor_non_attractor_dist = np.mean(non_attractor_distances[np.triu_indices(len(non_attractor_indices), k=1)])
+                else:
+                    non_attractor_non_attractor_dist = np.nan
+                
+                # Distances between attractors and non-attractors
+                if len(attractor_indices) > 0 and len(non_attractor_indices) > 0:
+                    cross_distances = dist_matrix[np.ix_(attractor_indices, non_attractor_indices)]
+                    attractor_non_attractor_dist = np.mean(cross_distances)
+                else:
+                    attractor_non_attractor_dist = np.nan
+                
+                results.append({
+                    'topic': topic,
+                    'attractor_attractor_dist': attractor_attractor_dist,
+                    'non_attractor_non_attractor_dist': non_attractor_non_attractor_dist,
+                    'attractor_non_attractor_dist': attractor_non_attractor_dist,
+                    'num_attractors':
